@@ -131,6 +131,9 @@ def get_runtime_required_args(return_unknown_args=False, args=None):
         "--tuned", action="store_true", help="Whether to load the best fine-tuned hyperparameters"
     )
     parser.add_argument(
+        "--save_model", action="store_true", help="Whether to save the trained model checkpoint to disk"
+    )
+    parser.add_argument(
         "--tuning_file_path", default="", help="If set, use the given YML path for tuning"
     )
     parser.add_argument(
@@ -442,6 +445,7 @@ def get_yml_cfg(args):
 
     # Here we create some variables based on parameters for easier usage
     set_shortcut_variables(cfg)
+    cfg._save_model = getattr(args, "save_model", False)
 
     # Based on the defined restart args, computes a unique path on disk
     # to store the files of each task

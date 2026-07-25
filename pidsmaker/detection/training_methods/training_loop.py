@@ -275,6 +275,17 @@ def main(cfg):
         }
     )
 
+    # Save the trained model checkpoint if --save_model is set
+    if getattr(cfg, "_save_model", False):
+        try:
+            import os
+            os.makedirs(cfg.training._task_path, exist_ok=True)
+            checkpoint_path = os.path.join(cfg.training._task_path, "velox_checkpoint.pt")
+            torch.save(model.state_dict(), checkpoint_path)
+            log(f"Model checkpoint saved successfully to {checkpoint_path}")
+        except Exception as e:
+            log(f"Warning: Failed to save model checkpoint: {e}")
+
     return best_val_score
 
 
