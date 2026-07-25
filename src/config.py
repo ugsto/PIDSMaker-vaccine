@@ -151,6 +151,8 @@ TASK_ARGS = {
      "detection": {
           "gnn_training": {
                "use_seed": bool,
+               "seed": int,
+               "deterministic": bool,
                "num_epochs": int,
                "patience": int,
                "lr": float,
