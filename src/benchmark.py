@@ -4,6 +4,20 @@ import random
 from collections import defaultdict
 
 import torch
+
+_orig_torch_load = torch.load
+
+
+def _torch_load_compat(*args, **kwargs):
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    if "mmap" not in kwargs:
+        kwargs["mmap"] = True
+    return _orig_torch_load(*args, **kwargs)
+
+
+torch.load = _torch_load_compat
+
 import wandb
 import numpy as np
 from provnet_utils import remove_underscore_keys, log
@@ -247,4 +261,3 @@ if __name__ == '__main__':
     # If it's a one-time run, we delete the files as we can't leverage them in future
     if cfg._restart_from_scratch:
         shutil.rmtree(cfg.preprocessing.build_graphs._task_path, ignore_errors=True)
-

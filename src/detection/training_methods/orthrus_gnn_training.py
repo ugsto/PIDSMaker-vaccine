@@ -182,6 +182,17 @@ def main(cfg):
         "peak_inference_gpu_memory": round(test_stats["peak_inference_gpu_memory"], 3),
         "time_per_batch_inference": round(test_stats["time_per_batch_inference"], 3),
     })
+
+    if getattr(cfg, "_save_model", False):
+        try:
+            os.makedirs(cfg.detection.gnn_training._task_path, exist_ok=True)
+            checkpoint_path = os.path.join(
+                cfg.detection.gnn_training._task_path, "velox_checkpoint.pt"
+            )
+            torch.save(model.state_dict(), checkpoint_path)
+            log(f"Model checkpoint saved successfully to {checkpoint_path}")
+        except Exception as e:
+            log(f"Warning: Failed to save model checkpoint: {e}")
     
     return best_val_ap
 
