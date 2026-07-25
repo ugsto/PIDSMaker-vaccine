@@ -24,7 +24,10 @@ from time import mktime
 import networkx as nx
 import nltk
 import numpy as np
-import psycopg2
+try:
+    import psycopg2
+except ImportError:  # duckdb-over-parquet path (PIDS_DUCKDB=1) needs no postgres
+    psycopg2 = None
 import pytz
 import torch
 from nltk.tokenize import word_tokenize
@@ -145,6 +148,14 @@ def init_database_connection(cfg):
         database_name = cfg.dataset.database_all_file
     else:
         database_name = cfg.dataset.database
+
+    # DuckDB-over-Parquet source (no postgres). Registers the dataset's parquet
+    # as views replicating the postgres schema; the cursor API matches psycopg2,
+    # so every consumer works unchanged. See pidsmaker/utils/duckdb_source.py.
+    if os.environ.get("PIDS_DUCKDB"):
+        from pidsmaker.utils.duckdb_source import duckdb_connection
+        con = duckdb_connection(database_name)
+        return con, con
 
     if cfg.database.host is not None:
         connect = psycopg2.connect(
