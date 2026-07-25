@@ -17,6 +17,17 @@ import time
 from collections import defaultdict
 
 import torch
+
+# Monkey-patch torch.load to default to weights_only=False and mmap=True for PyTorch 2.6+ compatibility
+_orig_load = torch.load
+def _safe_load(*args, **kwargs):
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    if "mmap" not in kwargs:
+        kwargs["mmap"] = True
+    return _orig_load(*args, **kwargs)
+torch.load = _safe_load
+
 import wandb
 
 from pidsmaker.config import (
