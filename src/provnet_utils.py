@@ -2,8 +2,10 @@ import pytz
 from time import mktime
 from datetime import datetime
 import time
-import psycopg2
-from psycopg2 import extras as ex
+try:
+    import psycopg2
+except ImportError:  # duckdb-over-parquet path (PIDS_DUCKDB=1) needs no postgres
+    psycopg2 = None
 import os.path as osp
 import os
 import copy
@@ -122,6 +124,15 @@ def init_database_connection(cfg):
         database_name = cfg.dataset.database_all_file
     else:
         database_name = cfg.dataset.database
+
+    # DuckDB-over-Parquet source (no postgres). Registers the dataset's parquet
+    # as views replicating the postgres schema; the cursor API matches psycopg2,
+    # so every consumer works unchanged. See src/duckdb_source.py.
+    if os.environ.get("PIDS_DUCKDB"):
+        from duckdb_source import duckdb_connection
+
+        con = duckdb_connection(database_name)
+        return con, con
 
     if cfg.database.host is not None:
         connect = psycopg2.connect(database = database_name,
