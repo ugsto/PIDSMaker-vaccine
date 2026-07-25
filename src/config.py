@@ -654,7 +654,7 @@ def get_default_cfg(args):
      Inits the shared cfg object with default configurations.
      """
      cfg = CN()
-     cfg._artifact_dir = ROOT_ARTIFACT_DIR
+     cfg._artifact_dir = args.artifact_dir
 
      cfg._test_mode = False
      cfg._is_running_mc_dropout = False
@@ -712,6 +712,7 @@ def get_runtime_required_args(return_unknown_args=False, args=None):
      parser.add_argument('--exp', type=str, default="", help="Name of the experiment")
      parser.add_argument('--tags', type=str, default="", help="Name of the tag to use. Tags are used to group runs together")
      parser.add_argument('--cpu', action="store_true", help="Whether to run the framework on CPU rather than GPU")
+     parser.add_argument('--artifact_dir', type=str, default=ROOT_ARTIFACT_DIR, help="Destination folder for generated files")
      parser.add_argument('--experiment', type=str, default="no_experiment", help="The experiment yml config file")
      parser.add_argument('--tuning_mode', type=str, default="none", help="Name of the tuning mode to run the pipeline with wandb sweeps")
      parser.add_argument('--tuned', action="store_true", help="Whether to load the best fine-tuned hyperparameters")
