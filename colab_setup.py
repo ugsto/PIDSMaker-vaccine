@@ -41,17 +41,27 @@ def main():
     print("\nInstalling PyTorch Geometric packages...")
     run_command("pip install -q torch_geometric")
 
-    pyg_wheels = ["pyg_lib", "torch_scatter", "torch_sparse", "torch_cluster", "torch_spline_conv"]
+    pyg_wheels = [
+        "pyg_lib",
+        "torch_scatter",
+        "torch_sparse",
+        "torch_cluster",
+        "torch_spline_conv",
+    ]
     pyg_cmd = f"pip install -q {' '.join(pyg_wheels)} -f https://data.pyg.org/whl/torch-{pyg_torch_ver}.html"
     try:
         run_command(pyg_cmd)
     except SystemExit:
         print("Failed to install matching PyG wheels. Trying standard installation...")
-        run_command("pip install -q pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv")
+        run_command(
+            "pip install -q pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv"
+        )
 
     print(f"\nDetecting Python version: {sys.version}")
     if sys.version_info >= (3, 10):
-        print("Python 3.10+ detected. Installing unpinned packages to use pre-built wheels...")
+        print(
+            "Python 3.10+ detected. Installing unpinned packages to use pre-built wheels..."
+        )
         deps = [
             "scikit-learn",
             "networkx",
@@ -105,9 +115,23 @@ def main():
 
     run_command(f"pip install -q {' '.join(deps)}")
 
-    print("\nInstalling PIDSMaker in editable mode...")
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    run_command(f"pip install -e {current_dir}")
+    has_install_metadata = any(
+        os.path.exists(os.path.join(current_dir, filename))
+        for filename in ("pyproject.toml", "setup.py", "setup.cfg")
+    )
+    if has_install_metadata:
+        print("\nInstalling PIDSMaker in editable mode...")
+        run_command(f"pip install -e {current_dir}")
+    else:
+        src_dir = os.path.join(current_dir, "src")
+        os.environ["PYTHONPATH"] = (
+            f"{src_dir}{os.pathsep}{os.environ['PYTHONPATH']}"
+            if os.environ.get("PYTHONPATH")
+            else src_dir
+        )
+        print("\nNo Python package metadata found; using the src/ layout directly.")
+        print("Run benchmark commands with: PYTHONPATH=/content/PIDSMaker-vaccine/src")
 
     print("\nDownloading NLTK datasets (punkt, punkt_tab)...")
     try:
@@ -119,8 +143,10 @@ def main():
         print(f"Warning: Failed to download NLTK datasets: {e}")
 
     print("\n=== Setup completed successfully! ===")
-    print("You can now import pidsmaker and run your experiments.")
-    print("Remember to set PIDS_DUCKDB=1 and PIDS_PARQUET_DIR='/path/to/parquet' (or R2 credentials).")
+    print("You can now run your experiments.")
+    print(
+        "Remember to set PIDS_DUCKDB=1 and PIDS_PARQUET_DIR='/path/to/parquet' (or R2 credentials)."
+    )
 
 
 if __name__ == "__main__":
