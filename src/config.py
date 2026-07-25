@@ -942,6 +942,8 @@ def get_yml_cfg(args):
      
      # Overwrites args to the cfg
      overwrite_cfg_with_args(cfg, args)
+     if cfg._use_cpu:
+          cfg.detection.gnn_training.inference_device = "cpu"
 
      # Asserts all required configurations are present in the final cfg
      check_task_dependency_graph(yml_file)
