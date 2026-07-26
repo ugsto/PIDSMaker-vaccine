@@ -145,7 +145,7 @@ def main():
     print("\n=== Setup completed successfully! ===")
     print("You can now run your experiments.")
     print(
-        "Remember to set PIDS_DUCKDB=1 and PIDS_PARQUET_DIR='/path/to/parquet' (or R2 credentials)."
+        "Remember to set PIDS_DUCKDB=1 and PIDS_PARQUET_DIR='/path/to/parquet' (or S3 credentials)."
     )
 
 

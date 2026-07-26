@@ -2,8 +2,8 @@
 
 PIDSMaker reads its graph from a postgres database whose tables are created by
 `postgres/init-create-databases.sh`. We already have those tables exported as
-parquet (per dataset, e.g. cadets_e3) — locally or in Cloudflare R2 — so instead
-of standing up postgres we register the parquet as DuckDB views that replicate
+parquet (per dataset, e.g. cadets_e3) — locally or in S3-compatible storage — so
+instead of standing up postgres we register the parquet as DuckDB views that replicate
 the postgres schema EXACTLY (column names, order, and types), then hand back a
 connection whose cursor API matches psycopg2's. Every existing `SELECT *` +
 positional-unpack site in the pipeline then works unchanged.
@@ -11,9 +11,10 @@ positional-unpack site in the pipeline then works unchanged.
 Activate by setting PIDS_DUCKDB=1. Source of the parquet:
   - PIDS_PARQUET_DIR=/path/to/dir   -> local dir holding events_*.parquet +
                                        {subject,file,netflow}_node_table.parquet
-  - else R2: s3://$PIDS_R2_BUCKET/<database>/...  (needs AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY, R2_ENDPOINT; bucket defaults to $R2_BUCKET_NAME or
-    'vaccine'). <database> is cfg.dataset.database (e.g. cadets_e3).
+  - else S3: s3://$PIDS_S3_BUCKET/<database>/...  (needs AWS_ENDPOINT_URL and
+    standard AWS credentials from the environment or an AWS profile; optional
+    PIDS_S3_PREFIX is inserted before <database>). <database> is
+    cfg.dataset.database (e.g. cadets_e3).
 
 The postgres DDL layouts we replicate (init-create-databases.sh):
   event_table       (src_node, src_index_id, operation, dst_node, dst_index_id,
@@ -28,7 +29,9 @@ ids are cast to VARCHAR to match the postgres DDL (src/dst_index_id VARCHAR),
 while node index_id stays BIGINT — exactly the postgres type split the pipeline
 was written against.
 """
+
 import os
+from urllib.parse import urlparse
 
 import duckdb
 
@@ -76,25 +79,59 @@ class _DuckCursor:
 def _parquet_uri(database, table, glob=False):
     local = os.environ.get("PIDS_PARQUET_DIR")
     if local:
-        name = f"events_*.parquet" if glob else f"{table}.parquet"
+        name = "events_*.parquet" if glob else f"{table}.parquet"
         return os.path.join(local, name)
-    bucket = os.environ.get("PIDS_R2_BUCKET") or os.environ.get("R2_BUCKET_NAME") or "vaccine"
+    bucket = os.environ.get("PIDS_S3_BUCKET")
+    if not bucket:
+        raise ValueError("PIDS_S3_BUCKET must be set when using S3 parquet input")
+
+    prefix = os.environ.get("PIDS_S3_PREFIX", "").strip("/")
+    path_parts = [part for part in (prefix, database) if part]
     name = "events_*.parquet" if glob else f"{table}.parquet"
-    return f"s3://{bucket}/{database}/{name}"
+    return f"s3://{bucket}/{'/'.join(path_parts)}/{name}"
+
+
+def _duckdb_s3_endpoint(endpoint_url):
+    """Normalize an S3-compatible endpoint for DuckDB httpfs."""
+    if not endpoint_url:
+        raise ValueError("AWS_ENDPOINT_URL must be set when using S3 parquet input")
+
+    parsed = urlparse(endpoint_url)
+    if parsed.scheme:
+        endpoint = parsed.netloc + parsed.path
+        use_ssl = parsed.scheme != "http"
+    else:
+        parsed = urlparse(f"//{endpoint_url}")
+        endpoint = parsed.netloc + parsed.path
+        use_ssl = True
+
+    endpoint = endpoint.rstrip("/")
+    if not endpoint:
+        raise ValueError(f"Invalid AWS_ENDPOINT_URL: {endpoint_url!r}")
+
+    return endpoint, use_ssl
 
 
 def duckdb_connection(database):
     """Return a psycopg2-cursor-shaped DuckDB connection with the 4 views."""
     con = duckdb.connect(":memory:")
     if not os.environ.get("PIDS_PARQUET_DIR"):
-        # R2 / S3-compatible source
-        con.execute("INSTALL httpfs; LOAD httpfs;")
-        con.execute(
-            "CREATE SECRET r2 (TYPE S3, KEY_ID ?, SECRET ?, ENDPOINT ?, "
-            "URL_STYLE 'path', USE_SSL true, REGION 'auto');",
-            [os.environ["AWS_ACCESS_KEY_ID"], os.environ["AWS_SECRET_ACCESS_KEY"],
-             os.environ["R2_ENDPOINT"]],
+        # S3-compatible source
+        con.execute("INSTALL httpfs; LOAD httpfs; INSTALL aws; LOAD aws;")
+        endpoint, use_ssl = _duckdb_s3_endpoint(os.environ.get("AWS_ENDPOINT_URL"))
+        profile = os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE")
+        use_ssl_sql = "true" if use_ssl else "false"
+        secret_sql = (
+            "CREATE SECRET pids_s3 (TYPE S3, PROVIDER credential_chain, "
+            "CHAIN 'env;config', "
         )
+        secret_params = []
+        if profile:
+            secret_sql += "PROFILE ?, "
+            secret_params.append(profile)
+        secret_sql += f"ENDPOINT ?, URL_STYLE 'path', USE_SSL {use_ssl_sql}, REGION ?);"
+        secret_params.extend([endpoint, os.environ.get("AWS_DEFAULT_REGION", "auto")])
+        con.execute(secret_sql, secret_params)
 
     ev = _parquet_uri(database, "events", glob=True)
     subj = _parquet_uri(database, "subject_node_table")
